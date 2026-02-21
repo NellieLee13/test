@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>南亞策略模擬器：76起每+1買5股，<=75全賣</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* 自訂滾動條樣式 */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-6xl mx-auto">
+    <div class="mb-8">
+      <h1 class="text-2xl sm:text-3xl font-bold text-white mb-2 tracking-tight">策略模擬器：76 元買 5 股；每 +1 再買 5 股；到 75（含）全賣</h1>
+      <p class="text-slate-400 text-sm sm:text-base">把你的價格序列貼進去（逗號/空白/換行都可以），按 <span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">Run</span> 就會出結果。此為策略邏輯展示，不含手續費與稅金。</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <!-- 左側：輸入與參數設定 -->
+      <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <div class="mb-5">
+          <label class="block text-sm font-medium text-slate-400 mb-2">價格序列（例如：76, 76.5, 77, 77.2, 78, 77.8, 75）</label>
+          <textarea id="prices" class="mono w-full h-40 bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow resize-y" spellcheck="false">76
+76.2
+76.8
+77
+77.4
+78
+78.2
+79
+78.6
+77.9
+76.5
+75</textarea>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4 mb-5">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">起始買入價</label>
+            <input id="firstBuy" type="number" step="0.01" value="76" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">每階買入股數</label>
+            <input id="qtyPerBuy" type="number" step="1" value="5" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">停損/出場價</label>
+            <input id="stopPrice" type="number" step="0.01" value="75" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">買入價位間距 (step)</label>
+            <input id="step" type="number" step="0.01" value="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">同 Tick 連續補買？</label>
+            <input id="multiFill" type="text" value="允許 (如跳空至79會補滿)" disabled class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-500 cursor-not-allowed" />
+          </div>
+        </div>
+
+        <button id="runBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-blue-900/20 active:scale-[0.98]">
+          執行策略分析
+        </button>
+        <div class="mt-4 text-xs text-slate-500 leading-relaxed">
+          💡 提示：如果你的資料是「日期, 收盤價」格式的 CSV，系統會自動抓出每行最後一個數字當作價格處理。
+        </div>
+      </div>
+
+      <!-- 右側：結果與明細 -->
+      <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col h-full">
+        <!-- KPI 區塊 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-xs text-slate-400 mb-1">最終狀態</div>
+            <div id="status" class="text-sm sm:text-base font-bold text-white truncate">—</div>
+          </div>
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-xs text-slate-400 mb-1">持股數量</div>
+            <div id="shares" class="text-sm sm:text-base font-bold text-white truncate">—</div>
+          </div>
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-xs text-slate-400 mb-1">平均成本</div>
+            <div id="avg" class="text-sm sm:text-base font-bold text-white truncate">—</div>
+          </div>
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-xs text-slate-400 mb-1">總損益 (Total PnL)</div>
+            <div id="pnl" class="text-sm sm:text-base font-bold truncate">—</div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-4 text-sm text-slate-400 mb-4 bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
+          <div>下一個買入價位：<span id="nextBuy" class="mono text-white font-medium">—</span></div>
+          <div class="hidden sm:block text-slate-600">|</div>
+          <div>最後一筆市價：<span id="lastPrice" class="mono text-white font-medium">—</span></div>
+        </div>
+
+        <div class="text-sm font-medium text-slate-300 mb-3 flex items-center justify-between">
+          <span>交易明細 (Trade Logs)</span>
+        </div>
+        
+        <!-- 表格區塊 -->
+        <div class="flex-1 min-h-[300px] overflow-auto border border-slate-700 rounded-xl bg-slate-950">
+          <table class="w-full text-sm text-left whitespace-nowrap">
+            <thead class="text-xs text-slate-400 uppercase bg-slate-900/80 sticky top-0 backdrop-blur-sm shadow-sm">
+              <tr>
+                <th scope="col" class="px-4 py-3 font-semibold">#</th>
+                <th scope="col" class="px-4 py-3 font-semibold">Tick</th>
+                <th scope="col" class="px-4 py-3 font-semibold">Price</th>
+                <th scope="col" class="px-4 py-3 font-semibold">Action</th>
+                <th scope="col" class="px-4 py-3 font-semibold">Qty</th>
+                <th scope="col" class="px-4 py-3 font-semibold">Hold</th>
+                <th scope="col" class="px-4 py-3 font-semibold">AvgCost</th>
+              </tr>
+            </thead>
+            <tbody id="trades" class="divide-y divide-slate-800/60">
+              <!-- JS 動態產生 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  function parsePrices(raw) {
+    const lines = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
+    const out = [];
+    for (const line of lines) {
+      const m = line.match(/(-?\d+(\.\d+)?)(?!.*-?\d+(\.\d+)?)/);
+      if (m) out.push(Number(m[1]));
+    }
+    if (out.length <= 1) {
+      const tokens = raw.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+      const nums = tokens.map(t => Number(t)).filter(n => Number.isFinite(n));
+      if (nums.length > out.length) return nums;
+    }
+    return out;
+  }
+
+  function fmt(n, d=2) {
+    if (!Number.isFinite(n)) return "—";
+    return n.toLocaleString("zh-Hant", { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+
+  function runStrategy(prices, firstBuy, qtyPerBuy, step, stopPrice) {
+    let shares = 0;
+    let avgCost = 0;
+    let realizedPnL = 0; // 修正：精準計算已實現損益，不再與現金流混淆
+    let nextBuy = firstBuy;
+    let exited = false;
+    const trades = [];
+
+    function buy(price, qty, tick) {
+      const cost = price * qty;
+      const newTotalCost = avgCost * shares + cost;
+      shares += qty;
+      avgCost = shares > 0 ? newTotalCost / shares : 0;
+
+      trades.push({
+        tick, price, action: "BUY", qty, hold: shares, avg: avgCost
+      });
+    }
+
+    function sellAll(price, tick) {
+      if (shares <= 0) return;
+      
+      // 計算此筆賣出的已實現損益 (賣出價 - 平均成本) * 股數
+      const pnl = (price - avgCost) * shares;
+      realizedPnL += pnl;
+
+      trades.push({
+        tick, price, action: "SELL_ALL", qty: shares, hold: 0, avg: avgCost
+      });
+      shares = 0;
+      exited = true;
+    }
+
+    for (let i = 0; i < prices.length; i++) {
+      const p = prices[i];
+
+      // 檢查停損（到 stopPrice 或更低：全部賣掉）
+      if (!exited && p <= stopPrice) {
+        sellAll(p, i);
+        break;
+      }
+
+      // 補買規則：價格 >= nextBuy 就買；並把 nextBuy 往上推 step
+      while (!exited && p >= nextBuy) {
+        buy(nextBuy, qtyPerBuy, i);
+        nextBuy = +(nextBuy + step).toFixed(10);
+      }
+    }
+
+    const lastPrice = prices.length ? prices[prices.length - 1] : NaN;
+    // 帳上未實現損益
+    const unrealized = shares > 0 && Number.isFinite(lastPrice) ? (lastPrice - avgCost) * shares : 0;
+    // 總損益 = 已實現 + 未實現
+    const total = realizedPnL + unrealized;
+
+    return { trades, shares, avgCost, nextBuy, lastPrice, realized: realizedPnL, unrealized, total, exited };
+  }
+
+  function render(result) {
+    const statusEl = document.getElementById("status");
+    const sharesEl = document.getElementById("shares");
+    const avgEl = document.getElementById("avg");
+    const pnlEl = document.getElementById("pnl");
+    const nextBuyEl = document.getElementById("nextBuy");
+    const lastPriceEl = document.getElementById("lastPrice");
+    const tbody = document.getElementById("trades");
+
+    statusEl.textContent = result.exited ? "已出場 (Stop Loss)" : "進行中 / 持有部位";
+    statusEl.className = `text-sm sm:text-base font-bold truncate ${result.exited ? 'text-amber-400' : 'text-emerald-400'}`;
+    
+    sharesEl.textContent = result.shares.toLocaleString("zh-Hant");
+    avgEl.textContent = result.shares > 0 ? fmt(result.avgCost, 2) : "—";
+
+    // 總損益顯示
+    const pnl = result.total;
+    pnlEl.textContent = (pnl > 0 ? "+" : "") + fmt(pnl, 2);
+    pnlEl.className = `text-sm sm:text-base font-bold truncate ${pnl > 0 ? "text-emerald-400" : pnl < 0 ? "text-rose-400" : "text-slate-300"}`;
+    pnlEl.title = `已實現損益: ${(result.realized>=0?"+":"") + fmt(result.realized,2)}\n未實現損益: ${(result.unrealized>=0?"+":"") + fmt(result.unrealized,2)}`;
+
+    nextBuyEl.textContent = result.exited ? "—" : fmt(result.nextBuy, 2);
+    lastPriceEl.textContent = fmt(result.lastPrice, 2);
+
+    tbody.innerHTML = "";
+    result.trades.forEach((t, idx) => {
+      const isBuy = t.action === "BUY";
+      const tr = document.createElement("tr");
+      tr.className = "hover:bg-slate-800/50 transition-colors";
+      tr.innerHTML = `
+        <td class="px-4 py-3 mono text-slate-500">${idx+1}</td>
+        <td class="px-4 py-3 mono text-slate-300">${t.tick}</td>
+        <td class="px-4 py-3 mono text-white">${fmt(t.price, 2)}</td>
+        <td class="px-4 py-3 mono font-semibold ${isBuy ? 'text-blue-400' : 'text-rose-400'}">
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs ${isBuy ? 'bg-blue-400/10' : 'bg-rose-400/10'}">${t.action}</span>
+        </td>
+        <td class="px-4 py-3 mono text-slate-300">${t.qty}</td>
+        <td class="px-4 py-3 mono text-slate-300">${t.hold}</td>
+        <td class="px-4 py-3 mono text-slate-400">${fmt(t.avg, 2)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (result.trades.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="7" class="px-4 py-8 text-center text-slate-500 text-sm">（沒有產生任何交易）請確認價格序列是否正確輸入。</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("runBtn").addEventListener("click", () => {
+    const pricesRaw = document.getElementById("prices").value;
+    const prices = parsePrices(pricesRaw);
+
+    const firstBuy = Number(document.getElementById("firstBuy").value);
+    const qtyPerBuy = Number(document.getElementById("qtyPerBuy").value);
+    const step = Number(document.getElementById("step").value);
+    const stopPrice = Number(document.getElementById("stopPrice").value);
+
+    const result = runStrategy(prices, firstBuy, qtyPerBuy, step, stopPrice);
+    render(result);
+  });
+
+  // 初次載入自動執行
+  document.getElementById("runBtn").click();
+</script>
+</body>
+</html>
